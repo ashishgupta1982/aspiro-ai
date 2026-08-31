@@ -1,0 +1,29 @@
+{
+  "name": "@aspiro/ai",
+  "version": "0.1.0",
+  "description": "Shared Claude integration for the Aspiro app suite. Tool loops, model config, JSON recovery, durable rate limiting.",
+  "type": "module",
+  "license": "MIT",
+  "repository": "github:ashishgupta1982/aspiro-ai",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./server": "./src/server/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.36.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.36.3"
+  }
+}
