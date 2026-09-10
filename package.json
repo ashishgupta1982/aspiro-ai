@@ -1,6 +1,6 @@
 {
   "name": "@aspiro/ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared Claude integration for the Aspiro app suite. Tool loops, model config, JSON recovery, durable rate limiting.",
   "type": "module",
   "license": "MIT",

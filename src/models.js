@@ -12,8 +12,24 @@
  * Vercel while the only central service (Command Center) is loopback-only.
  */
 
-/** Cost is USD per million tokens, checked against Anthropic's published pricing 2026-08-24. */
+/** Cost is USD per million tokens, checked against Anthropic's published pricing 2026-09-10. */
 export const MODELS = {
+  'claude-opus-5': {
+    label: 'Opus 5',
+    tier: 'deep',
+    cost: { input: 5, output: 25 },
+    contextWindow: 1000000,
+  },
+  'claude-sonnet-5': {
+    label: 'Sonnet 5',
+    tier: 'balanced',
+    cost: { input: 2, output: 10 },
+    contextWindow: 1000000,
+  },
+  // The 4.x entries below are still served by Anthropic and stay VALID, so an
+  // app or admin that deliberately pinned one keeps it. They are no longer the
+  // tier defaults: Sonnet 5 is both cheaper ($2/$10 vs $3/$15) and more capable
+  // than Sonnet 4.6, so there is no reason for a new call to land on 4.6.
   'claude-opus-4-8': {
     label: 'Opus 4.8',
     tier: 'deep',
@@ -45,8 +61,8 @@ export const MODELS = {
  */
 export const TIERS = {
   fast: 'claude-haiku-4-5-20251001',
-  balanced: 'claude-sonnet-4-6',
-  deep: 'claude-opus-4-8',
+  balanced: 'claude-sonnet-5',
+  deep: 'claude-opus-5',
 };
 
 /** Every id the suite is allowed to send, cheapest first. */
@@ -66,6 +82,16 @@ export const LEGACY_ALIASES = {
   'claude-3-5-haiku-20241022': 'claude-haiku-4-5-20251001',
   'claude-opus-4-6': 'claude-opus-4-8',
 };
+
+// Deliberately NOT aliased: `claude-sonnet-4-6` -> `claude-sonnet-5` and
+// `claude-opus-4-8` -> `claude-opus-5`. Both 4.x ids are still served, so they
+// are not "no longer valid" — this map exists for ids that would 404, and using
+// it to force a generation bump would silently override an admin who chose 4.6
+// on purpose. Apps move forward by pointing their defaults at a TIER NAME
+// ('balanced'/'deep'/'fast') rather than a literal id; a tier repoint here then
+// reaches every app on the next release. An app that hardcodes an id opts out
+// of that, which is the whole reason chessMaster was still running 4.6.
+
 
 export function isValidModel(id) {
   return Object.prototype.hasOwnProperty.call(MODELS, id);
