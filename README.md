@@ -77,9 +77,15 @@ Ships no React, so it needs no `transpilePackages` and no Tailwind content glob.
 import { TIERS, normalizeModel, estimateCost } from '@aspiro/ai';
 
 TIERS.fast      // claude-haiku-4-5-20251001
-TIERS.balanced  // claude-sonnet-4-6
-TIERS.deep      // claude-opus-4-8
+TIERS.balanced  // claude-sonnet-5
+TIERS.deep      // claude-opus-5
 ```
+
+`src/models.js` is the authority for what these point at today; the tiers were
+repointed to Opus 5 and Sonnet 5 in v0.2.0. The 4.x ids are still served and are
+deliberately **not** aliased onto the 5 ids, so an app that stored a literal
+`claude-sonnet-4-6` keeps getting it — storing a tier name is what makes an app
+follow the repoint.
 
 Apps map their own task names onto tiers. A model swap becomes a version bump
 here rather than a sweep through eight repos — though still a redeploy per app.
@@ -233,6 +239,28 @@ if (wasTruncated(response)) console.warn('truncated — recovered what completed
 Handles a fenced block, leading prose, and — the part only MoneyHub had — a
 response cut off at `max_tokens`, salvaging every array element that finished
 before the cut. Everywhere else that response was thrown away whole.
+
+## As built, per app
+
+The **model half** is adopted suite-wide; the tool loop, rate limiter and
+caching helpers are a separate decision and remain largely unadopted.
+
+| App | Model config | Admin surface |
+|---|---|---|
+| CookBook, DoIt, Tutor App, RunCoach, MoneyHub, ChessMaster | `createModelResolver` | `api/admin/ai-models.js` |
+| GolfSoc | `createModelResolver` | `api/admin/super/ai-models.js` — nested, not at the usual path |
+| GamePad | `createModelResolver` | **none, deliberately** — the app has no admin role |
+| VocabularyBuilder | registry only (`isValidModel`, `normalizeModel`) | none |
+
+**VocabularyBuilder keeps its own `AppSettings` single-global-model shape on
+purpose** — don't migrate it to the resolver for consistency. **ChessMaster and
+RunCoach kept their legacy `_id: 'ai-models'` config document**, so adopting the
+resolver needed no data migration; the resolver takes the app's own
+`loadConfig`/`saveConfig`, which is what makes that possible.
+
+Before this, three apps saved their admin model choice with `fs.writeFileSync`
+— impossible on Vercel, so the save silently reverted — and five each carried a
+drifting private copy of the valid-model list.
 
 ## Tests
 
