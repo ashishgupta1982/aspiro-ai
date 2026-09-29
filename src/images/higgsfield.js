@@ -149,6 +149,27 @@ export async function getImageStatus(requestId, { credentials, fetch } = {}) {
   return readResult(await call(`${BASE}/requests/${encodeURIComponent(requestId)}/status`, { method: 'GET' }));
 }
 
+/**
+ * Cancel a job that is still QUEUED at Higgsfield — refunded, per the docs.
+ * For a person pressing Cancel, never for a timeout: a job that has started
+ * can't be cancelled (400, surfaced as `code: 'started'`) and will be charged
+ * when it completes regardless.
+ */
+export async function cancelRequest(requestId, { credentials, fetch: fetchImpl = globalThis.fetch } = {}) {
+  if (!requestId) throw new ImageGenerationError('A requestId is required', { code: 'bad_response' });
+  client({ credentials, fetch: fetchImpl }); // validates credentials
+  const creds = credentials ?? process.env.HF_CREDENTIALS;
+  const res = await fetchImpl(`${BASE}/requests/${encodeURIComponent(requestId)}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Key ${creds}`, Accept: 'application/json' },
+  });
+  if (res.ok) return { cancelled: true };
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail || body?.error || res.statusText;
+  const code = res.status === 400 ? 'started' : res.status === 404 ? 'not_found' : 'http';
+  throw new ImageGenerationError(`Higgsfield ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`, { status: res.status, requestId, code });
+}
+
 export const isFinished = (status) => status === 'completed' || FAILED.has(status);
 export const isFailed = (status) => FAILED.has(status);
 

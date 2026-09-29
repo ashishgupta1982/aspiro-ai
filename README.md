@@ -105,6 +105,9 @@ Facts from Higgsfield's docs (2026-09-29) that the design rests on:
   slot and is **charged when it completes** — so nothing here cancels on a
   timeout. (v0.3.0 did; it freed nothing and paid for discarded images.)
 - **Charged on success only**; `failed` / `nsfw` are free.
+- **`cancelRequest(id)`** (v0.6.0) cancels a job Higgsfield still reports as
+  `queued`, and it is refunded. It is for a person pressing Cancel, never for a
+  timeout: a started job answers `code: 'started'` and is charged anyway.
 - **Webhooks:** `webhookUrl` adds `?hf_webhook=`. Higgsfield POSTs
   `{ request_id, status, error, payload }`, retries 5xx for two hours, and may
   repeat — dedupe on `request_id` + status. No signature is documented, so put

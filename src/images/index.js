@@ -8,6 +8,7 @@ export {
   submitImage,
   submitRequest,
   uploadInput,
+  cancelRequest,
   getImageStatus,
   generateImage,
   readResult,

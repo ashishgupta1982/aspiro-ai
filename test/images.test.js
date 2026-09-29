@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  submitImage, submitRequest, uploadInput, getImageStatus, generateImage, readResult, isFinished, isFailed, ImageGenerationError, IMAGE_MODELS,
+  submitImage, submitRequest, uploadInput, cancelRequest, getImageStatus, generateImage, readResult, isFinished, isFailed, ImageGenerationError, IMAGE_MODELS,
 } from '../src/images/index.js';
 
 const CREDS = 'kid:secret';
@@ -132,4 +132,13 @@ test('uploadInput asks for an upload URL, PUTs the bytes, returns the public URL
 test('uploadInput surfaces a failed PUT', async () => {
   const f = fakeFetch([{ status: 200, body: { upload_url: 'https://s3.example/put', public_url: 'p' } }, { status: 403, body: null }]);
   await assert.rejects(uploadInput(Buffer.from('x'), 'image/png', { credentials: CREDS, fetch: f }), (e) => e.code === 'http' && e.status === 403);
+});
+
+test('cancelRequest: 202 cancels; a started job is code "started"', async () => {
+  const ok = fakeFetch([{ status: 202, body: null }]);
+  assert.deepEqual(await cancelRequest('r1', { credentials: CREDS, fetch: ok }), { cancelled: true });
+  assert.equal(ok.calls[0].url, 'https://api.higgsfield.ai/requests/r1/cancel');
+  assert.equal(ok.calls[0].method, 'POST');
+  const started = fakeFetch([{ status: 400, body: { detail: 'The request has already started and can no longer be canceled.' } }]);
+  await assert.rejects(cancelRequest('r1', { credentials: CREDS, fetch: started }), (e) => e.code === 'started' && /already started/.test(e.message));
 });
