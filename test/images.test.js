@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  submitImage, getImageStatus, generateImage, readResult, isFinished, isFailed, ImageGenerationError, IMAGE_MODELS,
+  submitImage, submitRequest, uploadInput, getImageStatus, generateImage, readResult, isFinished, isFailed, ImageGenerationError, IMAGE_MODELS,
 } from '../src/images/index.js';
 
 const CREDS = 'kid:secret';
@@ -55,15 +55,20 @@ test('other HTTP errors keep the status and Higgsfield detail', async () => {
 
 test('getImageStatus reads status and the image url; 404 is not_found', async () => {
   const f = fakeFetch([done, { status: 200, body: { status: 'in_progress' } }, { status: 404, body: { detail: 'Not found' } }]);
-  assert.deepEqual(await getImageStatus('r1', { credentials: CREDS, fetch: f }), { status: 'completed', url: 'https://cdn.example/img.png', error: null });
+  assert.deepEqual(await getImageStatus('r1', { credentials: CREDS, fetch: f }), { status: 'completed', url: 'https://cdn.example/img.png', kind: 'image', error: null });
   assert.equal(f.calls[0].url, 'https://api.higgsfield.ai/requests/r1/status');
   assert.equal((await getImageStatus('r1', { credentials: CREDS, fetch: f })).status, 'in_progress');
   await assert.rejects(getImageStatus('r1', { credentials: CREDS, fetch: f }), (e) => e.code === 'not_found');
 });
 
 test('readResult understands a webhook body too', () => {
-  assert.deepEqual(readResult({ request_id: 'r1', status: 'completed', error: null, payload: { images: [{ url: 'u' }] } }), { status: 'completed', url: 'u', error: null });
-  assert.deepEqual(readResult({ status: 'nsfw', error: 'blocked', payload: null }), { status: 'nsfw', url: null, error: 'blocked' });
+  assert.deepEqual(readResult({ request_id: 'r1', status: 'completed', error: null, payload: { images: [{ url: 'u' }] } }), { status: 'completed', url: 'u', kind: 'image', error: null });
+  assert.deepEqual(readResult({ status: 'nsfw', error: 'blocked', payload: null }), { status: 'nsfw', url: null, kind: null, error: 'blocked' });
+});
+
+test('readResult reads a video (status check or webhook)', () => {
+  assert.deepEqual(readResult({ status: 'completed', video: { url: 'v.mp4' } }), { status: 'completed', url: 'v.mp4', kind: 'video', error: null });
+  assert.deepEqual(readResult({ status: 'completed', payload: { video: { url: 'w.mp4' } } }), { status: 'completed', url: 'w.mp4', kind: 'video', error: null });
 });
 
 test('isFinished / isFailed', () => {
@@ -99,4 +104,32 @@ test('missing credentials, unknown model and empty prompt fail before any reques
   await assert.rejects(submitImage({ prompt: 'p', model: 'nope', credentials: CREDS, fetch: f }), /Unknown image model/);
   await assert.rejects(submitImage({ prompt: '  ', credentials: CREDS, fetch: f }), /prompt is required/);
   assert.equal(f.calls.length, 0);
+});
+
+test('submitRequest posts any body to any model path', async () => {
+  const f = fakeFetch([queued]);
+  const out = await submitRequest({ path: 'kling-video/v3.0/pro/image-to-video', body: { prompt: 'p', image_url: 'u', duration: 5 }, credentials: CREDS, fetch: f });
+  assert.deepEqual(out, { requestId: 'r1', status: 'queued' });
+  assert.equal(f.calls[0].url, 'https://api.higgsfield.ai/kling-video/v3.0/pro/image-to-video');
+  assert.deepEqual(JSON.parse(f.calls[0].body), { prompt: 'p', image_url: 'u', duration: 5 });
+  await assert.rejects(submitRequest({ body: {}, credentials: CREDS, fetch: f }), /model path is required/);
+});
+
+test('uploadInput asks for an upload URL, PUTs the bytes, returns the public URL', async () => {
+  const f = fakeFetch([
+    { status: 200, body: { upload_url: 'https://s3.example/put', public_url: 'https://cdn.example/in.png', upload_headers: { 'x-amz-tagging': 'retention=temporary' } } },
+    { status: 200, body: null },
+  ]);
+  const out = await uploadInput(Buffer.from('png'), 'image/png', { credentials: CREDS, fetch: f });
+  assert.deepEqual(out, { url: 'https://cdn.example/in.png' });
+  assert.equal(f.calls[0].url, 'https://api.higgsfield.ai/files/generate-upload-url');
+  assert.deepEqual(JSON.parse(f.calls[0].body), { content_type: 'image/png' });
+  assert.equal(f.calls[1].url, 'https://s3.example/put');
+  assert.equal(f.calls[1].method, 'PUT');
+  assert.equal(f.calls[1].headers['x-amz-tagging'], 'retention=temporary');
+});
+
+test('uploadInput surfaces a failed PUT', async () => {
+  const f = fakeFetch([{ status: 200, body: { upload_url: 'https://s3.example/put', public_url: 'p' } }, { status: 403, body: null }]);
+  await assert.rejects(uploadInput(Buffer.from('x'), 'image/png', { credentials: CREDS, fetch: f }), (e) => e.code === 'http' && e.status === 403);
 });

@@ -72,7 +72,7 @@ Ships no React, so it needs no `transpilePackages` and no Tailwind content glob.
 |---|---|---|
 | `@aspiro/ai` | model registry, `normalizeModel`, `extractJson` | yes |
 | `@aspiro/ai/server` | everything above plus the SDK, tool loop, config, limits | **no** |
-| `@aspiro/ai/images` | `submitImage`, `getImageStatus`, `generateImage` on Higgsfield, `IMAGE_MODELS` | **no** (needs the API key) |
+| `@aspiro/ai/images` | `submitImage`, `submitRequest`, `uploadInput`, `getImageStatus`, `generateImage` on Higgsfield, `IMAGE_MODELS` | **no** (needs the API key) |
 
 ## Images — `@aspiro/ai/images`
 
@@ -89,6 +89,13 @@ const { status, url } = await getImageStatus(requestId);            // one check
 ```
 
 `generateImage` (submit + wait) is for scripts and one-offs only.
+
+**Any model, not just Soul** (v0.5.0): `submitRequest({ path, body })` posts to
+any model path (`kling-video/v3.0/pro/image-to-video`, …) for callers that keep
+their own registry of paths and fields — Command Center's Higgsfield tab does.
+`uploadInput(buffer, contentType)` uploads a start frame or reference and
+returns the `public_url` to pass as `image_url`. `readResult` returns
+`{ status, url, kind }`, reading images, video and audio alike.
 
 Facts from Higgsfield's docs (2026-09-29) that the design rests on:
 

@@ -1,6 +1,6 @@
 {
   "name": "@aspiro/ai",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Shared AI integration for the Aspiro app suite. Claude: tool loops, model config, JSON recovery, durable rate limiting. Images: Higgsfield generation.",
   "type": "module",
   "license": "MIT",

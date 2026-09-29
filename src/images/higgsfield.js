@@ -64,11 +64,56 @@ function client({ credentials = process.env.HF_CREDENTIALS, fetch: fetchImpl = g
   };
 }
 
-/** Normalise a status or webhook body into `{ status, url, error }`. */
+/**
+ * Normalise a status or webhook body into `{ status, url, kind, error }`.
+ * Images come back as `images[0].url`, video as `video.url`, audio as
+ * `audio.url` — at the top level on a status check, under `payload` on a
+ * webhook.
+ */
 export function readResult(body = {}) {
-  const images = body.images || body.payload?.images || [];
-  const url = images[0]?.url || null;
-  return { status: body.status, url, error: body.error || null };
+  const src = body.payload || body;
+  const image = (src.images || body.images || [])[0]?.url;
+  const video = src.video?.url || body.video?.url;
+  const audio = src.audio?.url || body.audio?.url;
+  const url = image || video || audio || null;
+  const kind = image ? 'image' : video ? 'video' : audio ? 'audio' : null;
+  return { status: body.status, url, kind, error: body.error || null };
+}
+
+/**
+ * Submit to any model path (image, video, audio) — the generic form of
+ * submitImage, for callers that keep their own registry of paths and fields
+ * (Command Center's Higgsfield tab). `body` is sent as-is.
+ */
+export async function submitRequest({ path, body = {}, webhookUrl, credentials, fetch } = {}) {
+  if (!path || typeof path !== 'string') throw new ImageGenerationError('A model path is required', { code: 'bad_response' });
+  const call = client({ credentials, fetch });
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  const qs = webhookUrl ? `?hf_webhook=${encodeURIComponent(webhookUrl)}` : '';
+  const res = await call(`${BASE}${clean}${qs}`, { method: 'POST', body: JSON.stringify(body) });
+  if (!res.request_id) throw new ImageGenerationError('Higgsfield returned no request_id', { code: 'bad_response' });
+  return { requestId: res.request_id, status: res.status };
+}
+
+/**
+ * Upload an input file (a start frame, a reference) and get the public URL to
+ * pass as `image_url` / `video_url` / `audio_url`. Two steps, per the docs:
+ * ask for a signed upload URL, then PUT the bytes with the headers it returns.
+ * The upload URL lasts an hour; the file is kept on temporary retention.
+ */
+export async function uploadInput(buffer, contentType, { credentials, fetch: fetchImpl = globalThis.fetch } = {}) {
+  if (!buffer?.length) throw new ImageGenerationError('Nothing to upload', { code: 'bad_response' });
+  if (!contentType) throw new ImageGenerationError('A content type is required', { code: 'bad_response' });
+  const call = client({ credentials, fetch: fetchImpl });
+  const slot = await call(`${BASE}/files/generate-upload-url`, { method: 'POST', body: JSON.stringify({ content_type: contentType }) });
+  if (!slot.upload_url || !slot.public_url) throw new ImageGenerationError('Higgsfield returned no upload URL', { code: 'bad_response' });
+  const put = await fetchImpl(slot.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType, ...(slot.upload_headers || {}) },
+    body: buffer,
+  });
+  if (!put.ok) throw new ImageGenerationError(`Upload failed: ${put.status}`, { status: put.status, code: 'http' });
+  return { url: slot.public_url };
 }
 
 /**
