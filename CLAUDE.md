@@ -35,6 +35,11 @@ image model id is written. Two things to keep true:
 - **It returns a URL, never bytes.** Downloading is a URL fetch, and URL fetches
   stay in the apps behind their SSRF guards (the same line `@aspiro/media` drew
   in its v0.3.0). The app copies the result with `uploadBuffer`.
+- **Never cancel on a timeout.** Only a *queued* job can be cancelled; a
+  processing one runs on, holds one of the account's 2 concurrency slots, and
+  is charged on completion. v0.3.0 cancelled at 50s and the first CookBook
+  backfill lost 9 of 20 photos to it (2026-09-29). Submit, store the id,
+  collect by webhook or status check.
 - **It bills a prepaid Higgsfield API balance** (`HF_CREDENTIALS`, from
   console.higgsfield.ai). A Higgsfield web/CLI subscription's credits are not
   reachable from here — that is the CLI's login, on a desktop.
@@ -82,7 +87,7 @@ src/
 ├── json.js        extractJson
 ├── images/        generateImage on Higgsfield — its own provider, its own entry
 │   ├── models.js      IMAGE_MODELS: the one place an image model id is written
-│   └── higgsfield.js  submit → poll → url; cancels on timeout
+│   └── higgsfield.js  submitImage / getImageStatus (the queue shape); generateImage for scripts
 └── server/
     ├── client.js      getClient — the SDK instance
     ├── call.js        the single-call path

@@ -72,22 +72,40 @@ Ships no React, so it needs no `transpilePackages` and no Tailwind content glob.
 |---|---|---|
 | `@aspiro/ai` | model registry, `normalizeModel`, `extractJson` | yes |
 | `@aspiro/ai/server` | everything above plus the SDK, tool loop, config, limits | **no** |
-| `@aspiro/ai/images` | `generateImage` on Higgsfield, `IMAGE_MODELS` | **no** (needs the API key) |
+| `@aspiro/ai/images` | `submitImage`, `getImageStatus`, `generateImage` on Higgsfield, `IMAGE_MODELS` | **no** (needs the API key) |
 
 ## Images — `@aspiro/ai/images`
 
-```js
-import { generateImage } from '@aspiro/ai/images';
+**It is a queue — submit, store the id, collect later.** Don't hold a request
+open waiting: a Soul image takes ~55s when Higgsfield is quiet and several
+minutes when it isn't.
 
-const { url, requestId } = await generateImage({ prompt: 'overhead photo of a lemon tart' });
+```js
+import { submitImage, getImageStatus } from '@aspiro/ai/images';
+
+const { requestId } = await submitImage({ prompt, webhookUrl });   // returns at once
+// …store requestId; later, from a webhook or a sweep:
+const { status, url } = await getImageStatus(requestId);            // one check
 ```
+
+`generateImage` (submit + wait) is for scripts and one-offs only.
+
+Facts from Higgsfield's docs (2026-09-29) that the design rests on:
+
+- **Concurrency counts queued AND processing jobs** (2 on the Aspiro account).
+  Over it is a 400, surfaced as `code: 'busy'` — treat as "wait", never a failure.
+- **Only a queued job can be cancelled.** A processing one runs on, holds its
+  slot and is **charged when it completes** — so nothing here cancels on a
+  timeout. (v0.3.0 did; it freed nothing and paid for discarded images.)
+- **Charged on success only**; `failed` / `nsfw` are free.
+- **Webhooks:** `webhookUrl` adds `?hf_webhook=`. Higgsfield POSTs
+  `{ request_id, status, error, payload }`, retries 5xx for two hours, and may
+  repeat — dedupe on `request_id` + status. No signature is documented, so put
+  a secret in the URL. `readResult(body)` reads a webhook or status body alike.
 
 - **Credentials:** `HF_CREDENTIALS=<key id>:<key secret>` from console.higgsfield.ai.
   Billed from that console's **prepaid API balance** — not a Higgsfield web or CLI
   subscription, whose credits cannot be spent from a server.
-- **Async under the hood:** submit, then poll until `completed` (or `failed` /
-  `nsfw` / `canceled`, thrown as `ImageGenerationError` with a `code`). On
-  `timeoutMs` (default 50s) the job is **cancelled** so nothing runs on unbilled-for.
 - **It returns a URL, never bytes.** Higgsfield hosts the result for about seven
   days, so an app that keeps it copies it — fetch it behind the app's own SSRF
   guard, then `uploadBuffer` from `@aspiro/media/server`. Fetching stays in the
