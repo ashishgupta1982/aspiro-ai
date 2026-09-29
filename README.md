@@ -1,20 +1,22 @@
 # @aspiro/ai
 
-Shared Claude integration for the Aspiro app suite: the tool-use loop, central
-model configuration, JSON recovery, and durable rate limiting.
+Shared AI integration for the Aspiro app suite: the Claude tool-use loop, central
+model configuration, JSON recovery, and durable rate limiting — plus, as its own
+entry point, image generation on Higgsfield (`@aspiro/ai/images`).
 
 Sibling to [`@aspiro/auth`](https://github.com/ashishgupta1982/aspiro-auth) and
 [`@aspiro/media`](https://github.com/ashishgupta1982/aspiro-media). Install it;
 don't clone another app.
 
-## Scope: this package is Claude-only
+## Scope: the core is Claude-only
 
 The name leaves room for another provider later. Nothing here pretends to
 abstract one — `runToolLoop` returns Anthropic content blocks, `cache_control`
 is an Anthropic concept, and `extractJson` handles Anthropic's specific habit of
 fencing JSON in Markdown. That is deliberate. A provider abstraction built
 before there is a second provider is a guess, and it would make every one of
-those things worse. If a second provider ever lands it gets its own entry point.
+those things worse. A second provider gets its own entry point — which is what
+`/images` is (v0.3.0).
 
 ## Why this exists
 
@@ -54,7 +56,7 @@ returns many small text blocks, one per citation segment. Three apps used
 ```jsonc
 // package.json
 "dependencies": {
-  "@aspiro/ai": "https://github.com/ashishgupta1982/aspiro-ai/archive/refs/tags/v0.1.0.tar.gz",
+  "@aspiro/ai": "https://github.com/ashishgupta1982/aspiro-ai/archive/refs/tags/v0.3.0.tar.gz",
   "@anthropic-ai/sdk": "^0.36.3"
 }
 ```
@@ -70,6 +72,29 @@ Ships no React, so it needs no `transpilePackages` and no Tailwind content glob.
 |---|---|---|
 | `@aspiro/ai` | model registry, `normalizeModel`, `extractJson` | yes |
 | `@aspiro/ai/server` | everything above plus the SDK, tool loop, config, limits | **no** |
+| `@aspiro/ai/images` | `generateImage` on Higgsfield, `IMAGE_MODELS` | **no** (needs the API key) |
+
+## Images — `@aspiro/ai/images`
+
+```js
+import { generateImage } from '@aspiro/ai/images';
+
+const { url, requestId } = await generateImage({ prompt: 'overhead photo of a lemon tart' });
+```
+
+- **Credentials:** `HF_CREDENTIALS=<key id>:<key secret>` from console.higgsfield.ai.
+  Billed from that console's **prepaid API balance** — not a Higgsfield web or CLI
+  subscription, whose credits cannot be spent from a server.
+- **Async under the hood:** submit, then poll until `completed` (or `failed` /
+  `nsfw` / `canceled`, thrown as `ImageGenerationError` with a `code`). On
+  `timeoutMs` (default 50s) the job is **cancelled** so nothing runs on unbilled-for.
+- **It returns a URL, never bytes.** Higgsfield hosts the result for about seven
+  days, so an app that keeps it copies it — fetch it behind the app's own SSRF
+  guard, then `uploadBuffer` from `@aspiro/media/server`. Fetching stays in the
+  app, as `@aspiro/media` requires.
+- **Models:** `IMAGE_MODELS` in `src/images/models.js`, the one place an image
+  model id is written. `soul-v2` (the default) is the cheap text-to-image model.
+  The docs list only `prompt` for it; pass anything else via `params`.
 
 ## Models
 

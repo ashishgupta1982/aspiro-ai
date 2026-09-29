@@ -27,13 +27,25 @@ A provider abstraction built before there is a second provider is a guess, and
 it would make each of those things worse. **If a second provider ever lands it
 gets its own entry point** — don't pre-emptively generalise this one.
 
+**`/images` is that second provider** (v0.3.0, 2026-09-29): Higgsfield image
+generation, first for CookBook's recipe photos. It shares nothing with the
+Claude core but the registry rule — `src/images/models.js` is the one place an
+image model id is written. Two things to keep true:
+
+- **It returns a URL, never bytes.** Downloading is a URL fetch, and URL fetches
+  stay in the apps behind their SSRF guards (the same line `@aspiro/media` drew
+  in its v0.3.0). The app copies the result with `uploadBuffer`.
+- **It bills a prepaid Higgsfield API balance** (`HF_CREDENTIALS`, from
+  console.higgsfield.ai). A Higgsfield web/CLI subscription's credits are not
+  reachable from here — that is the CLI's login, on a desktop.
+
 ## Editing this package changes nothing on its own
 
 **Apps pin a tagged tarball**, so a change reaches an app only when a tag is cut
 *and* that app's pin is bumped:
 
 ```jsonc
-"@aspiro/ai": "https://github.com/ashishgupta1982/aspiro-ai/archive/refs/tags/v0.2.0.tar.gz"
+"@aspiro/ai": "https://github.com/ashishgupta1982/aspiro-ai/archive/refs/tags/v0.3.0.tar.gz"
 ```
 
 Never `github:owner/repo` — npm writes `git+ssh://` into the lockfile and the
@@ -68,6 +80,9 @@ src/
 ├── index.js       TIERS, normalizeModel, estimateCost — safe to import anywhere
 ├── models.js      the registry: live ids, retired ids, aliases, tier pointers
 ├── json.js        extractJson
+├── images/        generateImage on Higgsfield — its own provider, its own entry
+│   ├── models.js      IMAGE_MODELS: the one place an image model id is written
+│   └── higgsfield.js  submit → poll → url; cancels on timeout
 └── server/
     ├── client.js      getClient — the SDK instance
     ├── call.js        the single-call path
@@ -77,7 +92,8 @@ src/
     └── rateLimit.js
 ```
 
-**Two entry points:** `@aspiro/ai` (pure, no SDK) and `/server`. Consuming apps
+**Three entry points:** `@aspiro/ai` (pure, no SDK), `/server`, and `/images`
+(Higgsfield, server-only, plain `fetch` — no SDK dependency). Consuming apps
 list this in `transpilePackages`.
 
 ## Rules that must not be undone
